@@ -47,6 +47,39 @@ python gui.py
 
 ---
 
+## 🔧 Building Your Own Executable
+
+Want to build the executable yourself?
+
+### Quick Method (Recommended)
+```bash
+make
+```
+
+That's it! The executable will be in `dist/gui`.
+
+### Manual Method
+```bash
+# Make sure you're using system Python (not Linuxbrew)
+/usr/bin/python3 -m pip install --user PyInstaller
+/usr/bin/python3 -m PyInstaller gui.spec
+```
+
+**Important:** Use **system Python** (`/usr/bin/python3`), not Linuxbrew Python. The spec file (`gui.spec`) has all the correct settings.
+
+### Automated CI/CD Builds
+Every push to `main` automatically builds executables for Linux, Windows, and macOS via GitHub Actions.
+
+**To create a release:**
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+This automatically creates a GitHub release with executables for all platforms! See [GITHUB_WORKFLOW.md](GITHUB_WORKFLOW.md) for details.
+
+---
+
 ## ✨ What It Does
 
 - 📥 **Fetch Collections** - Download all mod IDs from Steam Workshop collections

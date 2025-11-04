@@ -11,11 +11,10 @@ on:
 
 jobs:
   build:
-    name: Build on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: Build Windows Executable
+    runs-on: windows-latest
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ['3.13']
     
     steps:
@@ -32,45 +31,28 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests beautifulsoup4 dearpygui PyInstaller
     
-    - name: Build with PyInstaller (Linux/macOS)
-      if: runner.os != 'Windows'
-      run: |
-        python -m PyInstaller gui.spec
-        ls -lh dist/
-    
-    - name: Build with PyInstaller (Windows)
-      if: runner.os == 'Windows'
+    - name: Build with PyInstaller
       run: |
         python -m PyInstaller gui.spec
         dir dist\
     
-    - name: Rename executable with OS suffix
+    - name: Rename executable
       shell: bash
       run: |
         cd dist
-        if [ "${{ runner.os }}" == "Linux" ]; then
-          mv gui gui-linux
-        elif [ "${{ runner.os }}" == "macOS" ]; then
-          mv gui gui-macos
-        elif [ "${{ runner.os }}" == "Windows" ]; then
-          mv gui.exe gui-windows.exe
-        fi
+        mv gui.exe gui-windows.exe
     
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: rimworld-modlist-manager-${{ runner.os }}
-        path: |
-          dist/gui-*
-          dist/*.exe
+        name: rimworld-modlist-manager-Windows
+        path: dist/gui-windows.exe
         retention-days: 30
     
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/v')
       uses: softprops/action-gh-release@v1
       with:
-        files: |
-          dist/gui-*
-          dist/*.exe
+        files: dist/gui-windows.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
