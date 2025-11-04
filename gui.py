@@ -427,8 +427,17 @@ class RimWorldModlistGUI:
         dpg.configure_item("status_text", color=color)
 
     def _append_to_window(self, tag: str, text: str, color=(255, 255, 255)):
-        """Append text to a child window."""
-        dpg.add_text(text, parent=tag, color=color)
+        """Append text to a child window with selectable/copyable text."""
+        # Use input_text in readonly mode so text is selectable
+        dpg.add_input_text(
+            parent=tag,
+            default_value=text,
+            width=-1,
+            readonly=True,
+            no_spaces=False,
+            multiline=True,
+            height=25
+        )
         # Auto-scroll to bottom
         dpg.set_y_scroll(tag, -1)
 
@@ -450,6 +459,8 @@ class RimWorldModlistGUI:
         self._update_status("Fetching collection...", (255, 200, 100))
 
         def fetch_thread():
+            # Define output_name at the thread level to avoid scope issues
+            thread_output_name = output_name
             try:
                 # Extract collection ID
                 collection_id = extract_collection_id(collection_input)
@@ -483,11 +494,11 @@ class RimWorldModlistGUI:
                 )
 
                 # Determine output name
-                if not output_name:
-                    output_name = main_module.sanitize_filename(collection_title)
+                if not thread_output_name:
+                    thread_output_name = main_module.sanitize_filename(collection_title)
 
                 # Save to file
-                output_path = main_module.get_rwpackageid_path(output_name)
+                output_path = main_module.get_rwpackageid_path(thread_output_name)
                 main_module.write_workshop_ids_file(output_path, workshop_ids, collection_title)
 
                 self._append_to_window(
