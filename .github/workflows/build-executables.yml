@@ -36,23 +36,38 @@ jobs:
         python -m PyInstaller gui.spec
         dir dist\
     
-    - name: Rename executable
+    - name: Prepare release package
       shell: bash
       run: |
         cd dist
-        mv gui.exe gui-windows.exe
+        mkdir -p RimWorldModlistManager
+        mv gui.exe RimWorldModlistManager/gui-windows.exe
+        cp ../config.ini.example RimWorldModlistManager/
+        cp ../README_RELEASE.txt RimWorldModlistManager/
+        mkdir -p RimWorldModlistManager/rwpackageId_database
+        cp ../rwpackageId_database/.gitkeep RimWorldModlistManager/rwpackageId_database/
+        
+    - name: Create release zip
+      shell: bash
+      run: |
+        cd dist
+        7z a -tzip RimWorldModlistManager-Windows-v${{ github.ref_name }}.zip RimWorldModlistManager/
+        ls -lh *.zip
     
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: rimworld-modlist-manager-Windows
-        path: dist/gui-windows.exe
+        path: dist/RimWorldModlistManager-Windows-v${{ github.ref_name }}.zip
         retention-days: 30
     
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/v')
       uses: softprops/action-gh-release@v1
       with:
-        files: dist/gui-windows.exe
+        files: dist/RimWorldModlistManager-Windows-*.zip
+        draft: false
+        prerelease: false
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

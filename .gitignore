@@ -37,7 +37,8 @@ ENV/
 config.ini
 *.xml
 *.rwpackageId
-rwpackageId_database/
+rwpackageId_database/*
+!rwpackageId_database/.gitkeep
 mods/
 
 # OS
