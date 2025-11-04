@@ -1,6 +1,6 @@
-# 🎮 RimWorld Modlist Generator
+# 🎮 RimSort Modlist Generator
 
-Easily create RimWorld modlists from Steam Workshop collections with a beautiful GUI.
+Easily create RimSort modlists from Steam Workshop collections with a beautiful GUI.
 
 ---
 
@@ -83,7 +83,7 @@ This automatically creates a GitHub release with executables for all platforms! 
 ## ✨ What It Does
 
 - 📥 **Fetch Collections** - Download all mod IDs from Steam Workshop collections
-- 🔄 **Generate XML** - Create modlist files for RimWorld
+- 🔄 **Generate XML** - Create modlist files for [RimSort](https://github.com/RimSort/RimSort)
 - 🔗 **Merge Lists** - Combine multiple collections
 - ✂️ **Remove Mods** - Exclude specific mods from a collection
 - 🎯 **No Downloads Needed** - Works instantly (no need to download all mods)
@@ -188,5 +188,10 @@ MIT License - Free to use and modify
 Found a bug? Have a feature request? Open an issue on GitHub!
 
 ---
+
+
+## Thanks
+
+Thanks to [Chris24T](https://github.com/Chris24T) for the original solution, [RimList](https://github.com/Chris24T/RimLists), for rimpy, no code have been copied, but I did take a look at it to do mine !
 
 **Ready to organize your mods? [Download the latest release!](../../releases/latest)** 🚀

@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 """
-RimWorld Modlist Moulinette
+RimSort Modlist Moulinette
 
-This script converts a .rwpackageId file (list of Workshop IDs) to a RimWorld modlist XML file
+This script converts a .rwpackageId file (list of Workshop IDs) to a RimSort modlist XML file
 by reading package IDs from local mod folders.
 """
 

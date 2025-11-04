@@ -16,26 +16,26 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.13']
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-    
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install requests beautifulsoup4 dearpygui PyInstaller
-    
+
     - name: Build with PyInstaller
       run: |
         python -m PyInstaller gui.spec
         dir dist\
-    
+
     - name: Prepare release package
       shell: bash
       run: |
@@ -46,21 +46,21 @@ jobs:
         cp ../README_RELEASE.txt RimWorldModlistManager/
         mkdir -p RimWorldModlistManager/rwpackageId_database
         cp ../rwpackageId_database/.gitkeep RimWorldModlistManager/rwpackageId_database/
-        
+
     - name: Create release zip
       shell: bash
       run: |
         cd dist
         7z a -tzip RimWorldModlistManager-Windows-v${{ github.ref_name }}.zip RimWorldModlistManager/
         ls -lh *.zip
-    
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: rimworld-modlist-manager-Windows
         path: dist/RimWorldModlistManager-Windows-v${{ github.ref_name }}.zip
         retention-days: 30
-    
+
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/v')
       uses: softprops/action-gh-release@v1

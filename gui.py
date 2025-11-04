@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 """
-RimWorld Modlist Manager - GUI Application
+RimSort Modlist Manager - GUI Application
 
-A graphical interface for managing RimWorld modlists using DearPyGui.
+A graphical interface for managing RimSort modlists using DearPyGui.
 """
 
 import dearpygui.dearpygui as dpg
