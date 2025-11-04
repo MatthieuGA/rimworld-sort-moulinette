@@ -1,0 +1,76 @@
+name: Build Executables
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.13']
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests beautifulsoup4 dearpygui PyInstaller
+    
+    - name: Build with PyInstaller (Linux/macOS)
+      if: runner.os != 'Windows'
+      run: |
+        python -m PyInstaller gui.spec
+        ls -lh dist/
+    
+    - name: Build with PyInstaller (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        python -m PyInstaller gui.spec
+        dir dist\
+    
+    - name: Rename executable with OS suffix
+      shell: bash
+      run: |
+        cd dist
+        if [ "${{ runner.os }}" == "Linux" ]; then
+          mv gui gui-linux
+        elif [ "${{ runner.os }}" == "macOS" ]; then
+          mv gui gui-macos
+        elif [ "${{ runner.os }}" == "Windows" ]; then
+          mv gui.exe gui-windows.exe
+        fi
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: rimworld-modlist-manager-${{ runner.os }}
+        path: |
+          dist/gui-*
+          dist/*.exe
+        retention-days: 30
+    
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          dist/gui-*
+          dist/*.exe
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
