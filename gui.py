@@ -40,9 +40,9 @@ class RimWorldModlistGUI:
         dpg.create_viewport(
             title="RimWSort Modlist Manager",
             width=1000,
-            height=700,
+            height=850,
             min_width=800,
-            min_height=600
+            min_height=700
         )
         dpg.setup_dearpygui()
 
@@ -450,6 +450,7 @@ class RimWorldModlistGUI:
         self._update_status("Fetching collection...", (255, 200, 100))
 
         def fetch_thread():
+            nonlocal output_name
             try:
                 # Extract collection ID
                 collection_id = extract_collection_id(collection_input)
@@ -552,6 +553,7 @@ class RimWorldModlistGUI:
         self._update_status("Converting to XML...", (255, 200, 100))
 
         def convert_thread():
+            nonlocal output_name
             try:
                 # Get full path
                 input_file = os.path.join(self.config.database_dir, selected_file)
@@ -711,6 +713,7 @@ class RimWorldModlistGUI:
             self._update_status("Please select REMOVAL file", (255, 100, 100))
             return
 
+        # Assign default output name if empty
         if not output_name:
             output_name = base_file.replace('.rwpackageId', '_filtered')
 

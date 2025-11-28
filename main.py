@@ -192,6 +192,9 @@ def create_from_collection():
     
     print(f"\nFetching collection {collection_id} from Steam Workshop...")
     
+    output_name = None
+    output_path = None
+    
     try:
         # Fetch collection details
         collection_title, workshop_ids = fetch_collection_details(collection_id)
@@ -212,6 +215,8 @@ def create_from_collection():
         
         print(f"\n✓ Complete! Workshop IDs file created: {output_path}")
         
+    except KeyboardInterrupt:
+        print("\n\nCancelled.")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -234,6 +239,9 @@ def merge_id_lists():
     print("\n=== Merge ID Lists ===\n")
     
     config = get_config()
+    
+    output_name = None
+    output_path = None
     
     # Select first file
     file1 = select_rwpackageid_file("Select first .rwpackageId file")
@@ -292,6 +300,9 @@ def subtract_id_lists():
     print("\n=== Remove IDs from List ===\n")
     
     config = get_config()
+    
+    output_name = None
+    output_path = None
     
     # Select base file (the one to keep)
     print("First, select the BASE list (the list you want to keep and modify):")
@@ -440,6 +451,9 @@ Note: Files are saved to database directory (see config.ini) with .rwpackageId e
         return 1
 
     print(f"Fetching collection {collection_id} from Steam Workshop...")
+
+    output_name = None
+    output_path = None
 
     try:
         # Fetch collection details
