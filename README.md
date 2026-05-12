@@ -30,19 +30,24 @@ If you prefer to run from source code:
 ### 1. Install Python 3.13+
 Download from [python.org](https://www.python.org/downloads/)
 
-### 2. Install Dependencies
+### 2. Install Hatch
 ```bash
-pip install requests beautifulsoup4 dearpygui
+python -m pip install --upgrade hatch
 ```
 
 ### 3. Run the GUI
 ```bash
-./gui.py
+hatch run gui
 ```
 
 Or on Windows:
 ```cmd
-python gui.py
+hatch run gui
+```
+
+### 4. Run the CLI (optional)
+```bash
+hatch run cli --help
 ```
 
 ---
@@ -60,15 +65,13 @@ That's it! The executable will be in `dist/gui`.
 
 ### Manual Method
 ```bash
-# Make sure you're using system Python (not Linuxbrew)
-/usr/bin/python3 -m pip install --user PyInstaller
-/usr/bin/python3 -m PyInstaller gui.spec
+hatch run build-exe
 ```
 
-**Important:** Use **system Python** (`/usr/bin/python3`), not Linuxbrew Python. The spec file (`gui.spec`) has all the correct settings.
+The generated executable will be in `dist/`.
 
 ### Automated CI/CD Builds
-Every push to `main` automatically builds executables for Linux, Windows, and macOS via GitHub Actions.
+Every push to `main` and every published release builds a Windows executable via GitHub Actions.
 
 **To create a release:**
 ```bash
@@ -76,7 +79,7 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-This automatically creates a GitHub release with executables for all platforms! See [GITHUB_WORKFLOW.md](GITHUB_WORKFLOW.md) for details.
+This creates a release zip asset named `RimWorldModlistManager-Windows-vX.Y.Z.zip` attached to the release page.
 
 ---
 
