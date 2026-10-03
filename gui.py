@@ -14,8 +14,9 @@ from typing import Optional, List
 # Import our existing modules
 from config import get_config
 from steam_workshop import extract_collection_id, fetch_collection_details
-from mod_utils import convert_workshop_ids_to_package_ids
-from utils import create_modlist_xml
+from mod_utils import convert_workshop_ids_to_package_ids, convert_package_ids_to_workshop_ids
+from utils import create_modlist_xml, read_modlist_xml, write_workshop_ids_file
+from moulinette import get_rwpackageid_output_name
 import main as main_module  # Renamed to avoid conflict with main() function
 
 
@@ -90,15 +91,19 @@ class RimWorldModlistGUI:
                 with dpg.tab(label="🔄 Convert to XML"):
                     self._create_convert_tab()
 
-                # Tab 3: Merge Lists
+                # Tab 3: XML back to ID list
+                with dpg.tab(label="↩️ XML to ID List"):
+                    self._create_reverse_tab()
+
+                # Tab 4: Merge Lists
                 with dpg.tab(label="🔗 Merge Lists"):
                     self._create_merge_tab()
 
-                # Tab 4: Remove IDs
+                # Tab 5: Remove IDs
                 with dpg.tab(label="✂️ Remove IDs"):
                     self._create_remove_tab()
 
-                # Tab 5: Settings
+                # Tab 6: Settings
                 with dpg.tab(label="⚙️ Settings"):
                     self._create_settings_tab()
 
@@ -184,6 +189,11 @@ class RimWorldModlistGUI:
                     label="Browse",
                     callback=lambda: dpg.show_item("mods_dir_dialog")
                 )
+                dpg.add_button(
+                    label="Save as Default",
+                    callback=self._save_mods_dir_as_default,
+                    user_data="mods_dir_input"
+                )
 
             dpg.add_spacer(height=10)
             dpg.add_text("Output XML Name:")
@@ -219,6 +229,7 @@ class RimWorldModlistGUI:
             directory_selector=True,
             show=False,
             callback=self._on_mods_dir_selected,
+            user_data="mods_dir_input",
             tag="mods_dir_dialog",
             width=700,
             height=400
@@ -227,6 +238,94 @@ class RimWorldModlistGUI:
 
         # Refresh the list initially
         self._refresh_convert_list()
+
+    def _create_reverse_tab(self):
+        """Create the 'XML to ID List' tab."""
+        dpg.add_text("Convert a RimWorld modlist XML back to a .rwpackageId file")
+        dpg.add_spacer(height=10)
+
+        with dpg.group():
+            dpg.add_text("Modlist XML File:")
+            with dpg.group(horizontal=True):
+                dpg.add_input_text(
+                    tag="reverse_xml_input",
+                    hint="Path to a RimSort/RimWorld modlist XML",
+                    width=500
+                )
+                dpg.add_button(
+                    label="Browse",
+                    callback=lambda: dpg.show_item("reverse_xml_dialog")
+                )
+
+            dpg.add_spacer(height=10)
+            dpg.add_text("Mods Directory:")
+            with dpg.group(horizontal=True):
+                dpg.add_input_text(
+                    tag="reverse_mods_dir_input",
+                    default_value=self.config.default_mods_dir,
+                    width=500
+                )
+                dpg.add_button(
+                    label="Browse",
+                    callback=lambda: dpg.show_item("reverse_mods_dir_dialog")
+                )
+                dpg.add_button(
+                    label="Save as Default",
+                    callback=self._save_mods_dir_as_default,
+                    user_data="reverse_mods_dir_input"
+                )
+
+            dpg.add_spacer(height=10)
+            dpg.add_text("Output ID List Name:")
+            dpg.add_input_text(
+                tag="reverse_output_name",
+                hint="Leave empty to use XML name",
+                width=600
+            )
+
+            dpg.add_spacer(height=10)
+            dpg.add_button(
+                label="Convert to ID List",
+                callback=self._convert_from_xml,
+                width=200,
+                height=30
+            )
+
+            dpg.add_spacer(height=20)
+            dpg.add_separator()
+            dpg.add_spacer(height=10)
+
+            # Progress area
+            dpg.add_text("Progress:", color=(150, 150, 150))
+            dpg.add_child_window(
+                tag="reverse_progress",
+                width=-1,
+                height=200,
+                border=True
+            )
+
+        # File dialog for the modlist XML
+        with dpg.file_dialog(
+            show=False,
+            callback=self._on_reverse_xml_selected,
+            tag="reverse_xml_dialog",
+            width=700,
+            height=400
+        ):
+            dpg.add_file_extension(".xml")
+            dpg.add_file_extension(".*")
+
+        # File dialog for mods directory
+        with dpg.file_dialog(
+            directory_selector=True,
+            show=False,
+            callback=self._on_mods_dir_selected,
+            user_data="reverse_mods_dir_input",
+            tag="reverse_mods_dir_dialog",
+            width=700,
+            height=400
+        ):
+            dpg.add_file_extension(".*")
 
     def _create_merge_tab(self):
         """Create the 'Merge Lists' tab."""
@@ -527,12 +626,12 @@ class RimWorldModlistGUI:
             output_name = selected.replace('.rwpackageId', '.xml')
             dpg.set_value("convert_output_name", output_name)
 
-    def _on_mods_dir_selected(self, sender, app_data):
-        """Handle mods directory selection."""
+    def _on_mods_dir_selected(self, sender, app_data, user_data):
+        """Handle mods directory selection (user_data is the input to fill)."""
         selections = app_data.get('selections', {})
         if selections:
             path = list(selections.values())[0]
-            dpg.set_value("mods_dir_input", path)
+            dpg.set_value(user_data, path)
 
     def _convert_to_xml(self):
         """Convert selected .rwpackageId to XML."""
@@ -625,6 +724,149 @@ class RimWorldModlistGUI:
 
         # Run in thread to not block UI
         thread = threading.Thread(target=convert_thread, daemon=True)
+        thread.start()
+
+    def _save_mods_dir_as_default(self, sender, app_data, user_data):
+        """Save a mods directory input (user_data is its tag) as default_mods_dir in config.ini."""
+        mods_dir = dpg.get_value(user_data).strip()
+
+        if not os.path.isdir(mods_dir):
+            self._update_status("Mods directory does not exist", (255, 100, 100))
+            return
+
+        try:
+            self.config.parser['Paths']['default_mods_dir'] = mods_dir
+            self.config.save()
+
+            # Keep the Settings tab in sync so "Save Settings" doesn't revert it
+            dpg.set_value("setting_mods_dir", mods_dir)
+
+            self._update_status(f"Default mods directory saved: {mods_dir}", (100, 255, 100))
+
+        except Exception as e:
+            self._update_status(f"Error saving settings: {str(e)}", (255, 100, 100))
+
+    def _on_reverse_xml_selected(self, sender, app_data):
+        """Handle modlist XML selection in reverse tab."""
+        selections = app_data.get('selections', {})
+        path = list(selections.values())[0] if selections else app_data.get('file_path_name')
+        if path:
+            dpg.set_value("reverse_xml_input", path)
+            # Auto-fill output name
+            dpg.set_value("reverse_output_name", get_rwpackageid_output_name(path))
+
+    def _convert_from_xml(self):
+        """Convert a modlist XML back to a .rwpackageId file."""
+        xml_path = dpg.get_value("reverse_xml_input").strip().strip('"')
+        mods_dir = dpg.get_value("reverse_mods_dir_input")
+        output_name = dpg.get_value("reverse_output_name")
+
+        if not xml_path or not os.path.isfile(xml_path):
+            self._update_status("Please select an existing modlist XML file", (255, 100, 100))
+            return
+
+        if not os.path.isdir(mods_dir):
+            self._update_status("Mods directory does not exist", (255, 100, 100))
+            return
+
+        # Clear previous progress
+        self._clear_window("reverse_progress")
+        self._update_status("Converting to ID list...", (255, 200, 100))
+
+        def reverse_thread():
+            nonlocal output_name
+            try:
+                self._append_to_window(
+                    "reverse_progress",
+                    f"Reading package IDs from: {os.path.basename(xml_path)}",
+                    (200, 200, 200)
+                )
+
+                package_ids = read_modlist_xml(xml_path)
+                self._append_to_window(
+                    "reverse_progress",
+                    f"✓ Found {len(package_ids)} package ID(s)",
+                    (100, 255, 100)
+                )
+
+                # Convert to Workshop IDs
+                self._append_to_window(
+                    "reverse_progress",
+                    f"Indexing mod folders in: {mods_dir}",
+                    (200, 200, 200)
+                )
+
+                workshop_ids, unresolved = convert_package_ids_to_workshop_ids(package_ids, mods_dir)
+
+                self._append_to_window(
+                    "reverse_progress",
+                    f"✓ Resolved {len(workshop_ids)} Workshop ID(s)",
+                    (100, 255, 100)
+                )
+
+                if unresolved:
+                    self._append_to_window(
+                        "reverse_progress",
+                        f"⚠ {len(unresolved)} package ID(s) not found in mods directory "
+                        f"(kept as comments in the output file):",
+                        (255, 200, 100)
+                    )
+                    max_lines = self.config.max_warning_lines
+                    shown = unresolved if max_lines == 0 else unresolved[:max_lines]
+                    for package_id in shown:
+                        self._append_to_window("reverse_progress", f"   - {package_id}", (255, 200, 100))
+                    if len(shown) < len(unresolved):
+                        self._append_to_window(
+                            "reverse_progress",
+                            f"   ... and {len(unresolved) - len(shown)} more",
+                            (255, 200, 100)
+                        )
+
+                if not workshop_ids:
+                    self._append_to_window(
+                        "reverse_progress",
+                        "❌ No Workshop IDs could be resolved, nothing saved",
+                        (255, 100, 100)
+                    )
+                    self._update_status("Error: No Workshop IDs resolved", (255, 100, 100))
+                    return
+
+                # Determine output name
+                if not output_name:
+                    output_name = get_rwpackageid_output_name(xml_path)
+
+                # Save
+                output_path = main_module.get_rwpackageid_path(output_name)
+                write_workshop_ids_file(
+                    output_path,
+                    workshop_ids,
+                    f"Imported from {os.path.basename(xml_path)}",
+                    unresolved
+                )
+
+                self._append_to_window(
+                    "reverse_progress",
+                    f"✓ Saved to: {output_path}",
+                    (100, 255, 100)
+                )
+
+                self._update_status("Conversion completed successfully!", (100, 255, 100))
+
+                # Make the new ID list available in the other tabs
+                self._refresh_convert_list()
+                self._refresh_merge_lists()
+                self._refresh_remove_lists()
+
+            except Exception as e:
+                self._append_to_window(
+                    "reverse_progress",
+                    f"❌ Error: {str(e)}",
+                    (255, 100, 100)
+                )
+                self._update_status(f"Error: {str(e)}", (255, 100, 100))
+
+        # Run in thread to not block UI
+        thread = threading.Thread(target=reverse_thread, daemon=True)
         thread.start()
 
     def _refresh_merge_lists(self):

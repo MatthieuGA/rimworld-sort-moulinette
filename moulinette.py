@@ -3,14 +3,14 @@
 RimSort Modlist Moulinette
 
 This script converts a .rwpackageId file (list of Workshop IDs) to a RimSort modlist XML file
-by reading package IDs from local mod folders.
+by reading package IDs from local mod folders, and back (--reverse).
 """
 
 import argparse
 import os
 import sys
-from utils import create_modlist_xml
-from mod_utils import convert_workshop_ids_to_package_ids
+from utils import create_modlist_xml, read_modlist_xml, write_workshop_ids_file
+from mod_utils import convert_workshop_ids_to_package_ids, convert_package_ids_to_workshop_ids
 from config import get_config
 
 
@@ -260,9 +260,120 @@ def process_modlist(input_file: str, mods_dir: str, output_file: str,
         return 1
 
 
+def get_rwpackageid_output_name(xml_path: str) -> str:
+    """
+    Get the default .rwpackageId name for a modlist XML file (its base name, no extension).
+
+    Args:
+        xml_path: Path to the modlist XML file
+
+    Returns:
+        Base name without the .xml extension
+    """
+    base_name = os.path.basename(xml_path)
+    if base_name.lower().endswith('.xml'):
+        base_name = base_name[:-len('.xml')]
+    return base_name
+
+
+def process_reverse(input_xml: str, mods_dir: str, output_file: str) -> int:
+    """
+    Process a modlist XML and create a .rwpackageId file.
+
+    Args:
+        input_xml: Path to the modlist XML file
+        mods_dir: Path to the mods directory
+        output_file: Path to the output .rwpackageId file
+
+    Returns:
+        Exit code (0 for success, 1 for error)
+    """
+    if not os.path.isfile(input_xml):
+        print(f"Error: Input file does not exist: {input_xml}")
+        return 1
+
+    if not os.path.isdir(mods_dir):
+        print(f"Error: Mods directory does not exist: {mods_dir}")
+        return 1
+
+    try:
+        print(f"Reading package IDs from: {input_xml}")
+        package_ids = read_modlist_xml(input_xml)
+
+        if not package_ids:
+            print("Error: No package IDs found in input file")
+            return 1
+
+        print(f"✓ Found {len(package_ids)} package ID(s)")
+
+        workshop_ids, unresolved = convert_package_ids_to_workshop_ids(package_ids, mods_dir)
+
+        if not workshop_ids:
+            print("Error: No Workshop IDs could be resolved")
+            return 1
+
+        print(f"\nWriting Workshop IDs to file...")
+        write_workshop_ids_file(
+            output_file,
+            workshop_ids,
+            f"Imported from {os.path.basename(input_xml)}",
+            unresolved
+        )
+
+        return 0
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return 1
+
+
+def reverse_interactive(args) -> int:
+    """
+    Interactive workflow to convert a modlist XML to a .rwpackageId file.
+
+    Args:
+        args: Parsed command-line arguments (mods_dir is used if set)
+
+    Returns:
+        Exit code (0 for success, 1 for error)
+    """
+    config = get_config()
+
+    print("=== RimWorld Modlist Moulinette - Reverse Interactive Mode ===\n")
+
+    try:
+        input_xml = input("Enter modlist XML file path: ").strip().strip('"')
+        if not input_xml:
+            print("Cancelled.")
+            return 1
+
+        default_name = get_rwpackageid_output_name(input_xml)
+        custom_name = input(f"\nEnter output name (default: {default_name}): ").strip()
+        output_file = get_rwpackageid_path(custom_name if custom_name else default_name)
+
+        if args.mods_dir:
+            mods_dir = args.mods_dir
+        else:
+            default_mods_dir = config.default_mods_dir
+            mods_dir_input = input(f"\nEnter mods directory path (default: {default_mods_dir}): ").strip()
+            mods_dir = mods_dir_input if mods_dir_input else default_mods_dir
+    except KeyboardInterrupt:
+        print("\nCancelled.")
+        return 1
+
+    print("\n" + "=" * 60)
+    print("Configuration:")
+    print(f"  Input:  {input_xml}")
+    print(f"  Mods:   {mods_dir}")
+    print(f"  Output: {output_file}")
+    print("=" * 60 + "\n")
+
+    return process_reverse(input_xml, mods_dir, output_file)
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert a .rwpackageId file to a RimWorld modlist XML",
+        description="Convert a .rwpackageId file to a RimWorld modlist XML (or back with --reverse)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -280,12 +391,25 @@ Examples:
 
   # Without expansions
   python moulinette.py -i mymodlist -d ./mods --no-expansions
+
+  # Reverse: modlist XML back to a .rwpackageId (saved in the database directory)
+  python moulinette.py --reverse -i "My Modlist.xml" -d ./mods
+  python moulinette.py --reverse -i "My Modlist.xml" -d ./mods -o mymodlist
+
+  # Reverse, interactive mode
+  python moulinette.py --reverse
         """
     )
 
     parser.add_argument(
+        '-r', '--reverse',
+        action='store_true',
+        help='Reverse mode: convert a modlist XML back to a .rwpackageId file'
+    )
+    parser.add_argument(
         '-i', '--input',
-        help='Input .rwpackageId file name or path (if not provided, interactive mode)'
+        help='Input .rwpackageId file name or path, or modlist XML path with --reverse '
+             '(if not provided, interactive mode)'
     )
     parser.add_argument(
         '-d', '--mods-dir',
@@ -293,7 +417,8 @@ Examples:
     )
     parser.add_argument(
         '-o', '--output',
-        help='Output XML file name or path (if not provided, uses input name)'
+        help='Output XML file name or path, or .rwpackageId name with --reverse '
+             '(if not provided, uses input name)'
     )
     parser.add_argument(
         '-v', '--version',
@@ -308,6 +433,18 @@ Examples:
     args = parser.parse_args()
     
     config = get_config()
+
+    if args.reverse:
+        if not args.input:
+            return reverse_interactive(args)
+
+        if not args.mods_dir:
+            print("Error: --mods-dir is required when using command-line mode")
+            print("  Run with only --reverse for interactive mode")
+            return 1
+
+        output_file = get_rwpackageid_path(args.output if args.output else get_rwpackageid_output_name(args.input))
+        return process_reverse(args.input, args.mods_dir, output_file)
 
     # Interactive mode if no input file specified
     if not args.input:

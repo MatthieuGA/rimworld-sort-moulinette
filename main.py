@@ -12,6 +12,7 @@ import sys
 import subprocess
 from steam_workshop import extract_collection_id, fetch_collection_details
 from config import get_config
+from utils import write_workshop_ids_file
 
 
 def get_database_dir() -> str:
@@ -55,31 +56,6 @@ def get_rwpackageid_path(name: str) -> str:
         name = f"{name}.rwpackageId"
     
     return os.path.join(database_dir, name)
-
-
-def write_workshop_ids_file(filepath: str, workshop_ids: list, collection_title: str = None) -> None:
-    """
-    Write Workshop IDs to a .rwpackageId file.
-    
-    Args:
-        filepath: Path to the output .rwpackageId file
-        workshop_ids: List of Steam Workshop mod IDs (numeric)
-        collection_title: Optional collection title for the header
-    """
-    # Ensure directory exists
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    
-    with open(filepath, 'w') as f:
-        f.write("# RimWorld Steam Workshop Collection\n")
-        if collection_title:
-            f.write(f"# Collection: {collection_title}\n")
-        f.write("# One Workshop ID per line\n")
-        f.write("# Lines starting with # are comments\n\n")
-        
-        for workshop_id in workshop_ids:
-            f.write(f"{workshop_id}\n")
-    
-    print(f"✓ Workshop IDs saved to: {filepath}")
 
 
 def read_workshop_ids_file(filepath: str) -> list:
@@ -234,6 +210,19 @@ def convert_to_xml():
         print("\nError: moulinette.py not found")
 
 
+def convert_from_xml():
+    """Interactive workflow to convert a RimSort list XML back to a .rwpackageId."""
+    print("\n=== Convert RimSort List to ID List ===\n")
+
+    # Run moulinette.py in reverse interactive mode
+    try:
+        subprocess.run([sys.executable, "moulinette.py", "--reverse"], check=True)
+    except subprocess.CalledProcessError:
+        print("\nError running moulinette.py")
+    except FileNotFoundError:
+        print("\nError: moulinette.py not found")
+
+
 def merge_id_lists():
     """Interactive workflow to merge two .rwpackageId files."""
     print("\n=== Merge ID Lists ===\n")
@@ -372,6 +361,7 @@ def show_menu():
     print("2. Convert ID list to RimSort list")
     print("3. Merge ID lists together")
     print("4. Remove IDs from list")
+    print("5. Convert RimSort list to ID list")
     print("q. Quit")
     print()
 
@@ -380,9 +370,9 @@ def interactive_mode():
     """Run the interactive menu system."""
     while True:
         show_menu()
-        
+
         try:
-            choice = input("Select an option (1-4 or q): ").strip().lower()
+            choice = input("Select an option (1-5 or q): ").strip().lower()
             
             if choice == '1':
                 create_from_collection()
@@ -392,11 +382,13 @@ def interactive_mode():
                 merge_id_lists()
             elif choice == '4':
                 subtract_id_lists()
+            elif choice == '5':
+                convert_from_xml()
             elif choice == 'q':
                 print("\nGoodbye!")
                 return 0
             else:
-                print("\nInvalid option. Please select 1, 2, 3, 4, or q")
+                print("\nInvalid option. Please select 1, 2, 3, 4, 5, or q")
         
         except KeyboardInterrupt:
             print("\n\nGoodbye!")
@@ -415,6 +407,8 @@ Interactive Mode (no arguments):
   - Create ID lists from Steam collections
   - Convert ID lists to XML
   - Merge multiple ID lists
+  - Remove IDs from a list
+  - Convert XML back to an ID list
 
 Command-Line Mode Examples:
   # From a collection ID with custom name

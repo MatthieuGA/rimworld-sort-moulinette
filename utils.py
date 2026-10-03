@@ -18,6 +18,8 @@ def _get_default_expansions():
 DEFAULT_VERSION = None  # Will be dynamically retrieved
 DEFAULT_EXPANSIONS = None  # Will be dynamically retrieved
 
+BASE_GAME_PACKAGE_ID = "ludeon.rimworld"
+
 
 def get_package_id_from_about_xml(about_xml_path: str) -> Optional[str]:
     """
@@ -73,13 +75,20 @@ def create_modlist_xml(
         else:
             expansions = []
     
-    # Ensure ludeon.rimworld is first in activeMods
-    if "ludeon.rimworld" not in package_ids:
-        package_ids.insert(0, "ludeon.rimworld")
-    elif package_ids[0] != "ludeon.rimworld":
-        package_ids.remove("ludeon.rimworld")
-        package_ids.insert(0, "ludeon.rimworld")
-    
+    # activeMods order: base game, then expansions, then mods.
+    # Expansions must be active (not only known) for RimWorld/RimSort to load them.
+    official_ids = [BASE_GAME_PACKAGE_ID]
+    for expansion_id in expansions:
+        expansion_id = expansion_id.lower()
+        if expansion_id not in official_ids:
+            official_ids.append(expansion_id)
+
+    active_ids = list(official_ids)
+    for package_id in package_ids:
+        package_id = package_id.lower()
+        if package_id not in active_ids:
+            active_ids.append(package_id)
+
     # Create root element
     root = ET.Element("ModsConfigData")
     
@@ -90,9 +99,9 @@ def create_modlist_xml(
     
     # Add activeMods
     active_mods = ET.Element("activeMods")
-    for package_id in package_ids:
+    for package_id in active_ids:
         li = ET.Element("li")
-        li.text = package_id.lower()
+        li.text = package_id
         active_mods.append(li)
     root.append(active_mods)
     
@@ -111,3 +120,66 @@ def create_modlist_xml(
     # Write to file
     tree.write(output_path, encoding='utf-8', xml_declaration=True)
     print(f"✓ Modlist XML saved to: {output_path}")
+
+
+def read_modlist_xml(xml_path: str) -> List[str]:
+    """
+    Read the activeMods package IDs from a RimWorld/RimSort modlist XML file.
+
+    Args:
+        xml_path: Path to the modlist XML file
+
+    Returns:
+        List of package IDs (lowercase), in load order
+
+    Raises:
+        ValueError: If the file is not a valid modlist XML
+    """
+    try:
+        root = ET.parse(xml_path).getroot()
+    except ET.ParseError as e:
+        raise ValueError(f"Invalid XML file: {e}")
+
+    active_mods = root.find("activeMods")
+    if active_mods is None:
+        raise ValueError("No <activeMods> section found in XML file")
+
+    return [li.text.strip().lower() for li in active_mods.findall("li") if li.text and li.text.strip()]
+
+
+def is_official_package_id(package_id: str) -> bool:
+    """Check if a package ID is the base game or an official expansion."""
+    return package_id.lower().startswith(BASE_GAME_PACKAGE_ID)
+
+
+def write_workshop_ids_file(filepath: str, workshop_ids: list, collection_title: str = None,
+                            unresolved: Optional[List[str]] = None) -> None:
+    """
+    Write Workshop IDs to a .rwpackageId file.
+
+    Args:
+        filepath: Path to the output .rwpackageId file
+        workshop_ids: List of Steam Workshop mod IDs (numeric)
+        collection_title: Optional collection title for the header
+        unresolved: Optional package IDs that could not be resolved to a Workshop ID,
+                    written as trailing comments so they are not silently lost
+    """
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(filepath) or '.', exist_ok=True)
+
+    with open(filepath, 'w') as f:
+        f.write("# RimWorld Steam Workshop Collection\n")
+        if collection_title:
+            f.write(f"# Collection: {collection_title}\n")
+        f.write("# One Workshop ID per line\n")
+        f.write("# Lines starting with # are comments\n\n")
+
+        for workshop_id in workshop_ids:
+            f.write(f"{workshop_id}\n")
+
+        if unresolved:
+            f.write("\n# Package IDs with no matching Workshop mod (not included above):\n")
+            for package_id in unresolved:
+                f.write(f"# - {package_id}\n")
+
+    print(f"✓ Workshop IDs saved to: {filepath}")

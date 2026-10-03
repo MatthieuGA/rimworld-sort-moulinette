@@ -93,7 +93,7 @@ This automatically creates a GitHub release with executables for all platforms! 
 
 ## 📋 Using the GUI
 
-The GUI has 5 tabs:
+The GUI has 6 tabs:
 
 1. **📥 Create from Collection**
    - Paste a Steam Workshop collection URL or ID
@@ -101,18 +101,23 @@ The GUI has 5 tabs:
 
 2. **🔄 Convert to XML**
    - Select a mod list
-   - Generate RimWorld-compatible XML
+   - Generate RimWorld-compatible XML (base game and expansions are added to the active mods)
    - Save to your mod manager
 
-3. **🔗 Merge Lists**
+3. **↩️ XML to ID List**
+   - Select an existing RimSort/RimWorld modlist XML
+   - Turn it back into an ID list, using your mods directory to find each mod's Workshop ID
+   - Mods that can't be matched (local-only mods, missing mods) are kept as comments in the file
+
+4. **🔗 Merge Lists**
    - Combine multiple collections
    - Automatically removes duplicates
 
-4. **✂️ Remove Mods**
+5. **✂️ Remove Mods**
    - Remove specific mods from a list
    - Perfect for excluding incompatible mods
 
-5. **⚙️ Settings**
+6. **⚙️ Settings**
    - Customize paths
    - Adjust RimWorld version
    - Configure expansions
@@ -152,6 +157,11 @@ A: The collection fetching needs internet. Once you have a list, XML generation 
 
 **Q: Where and how are the ID list stored?**
 A: In the `rwpackageId_database/` folder, in a `.rwpackageId` file (a simple text file)
+
+**Q: Can I turn an existing RimSort list back into an ID list?**
+A: Yes! Use the "XML to ID List" tab, or from the command line:
+`python moulinette.py --reverse -i "My Modlist.xml" -d ./mods`
+The mods directory is needed to match each package ID to its Workshop ID.
 
 ---
 
