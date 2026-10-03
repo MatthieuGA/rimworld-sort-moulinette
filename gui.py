@@ -11,6 +11,13 @@ import sys
 import threading
 from typing import Optional, List
 
+# Native OS file dialogs (tkinter may be missing on some Linux Python builds)
+try:
+    import tkinter
+    from tkinter import filedialog
+except ImportError:
+    tkinter = None
+
 # Import our existing modules
 from config import get_config
 from steam_workshop import extract_collection_id, fetch_collection_details
@@ -18,6 +25,34 @@ from mod_utils import convert_workshop_ids_to_package_ids, convert_package_ids_t
 from utils import create_modlist_xml, read_modlist_xml, write_workshop_ids_file
 from moulinette import get_rwpackageid_output_name
 import main as main_module  # Renamed to avoid conflict with main() function
+
+
+def native_dialog(dialog_name: str, **options) -> Optional[str]:
+    """
+    Open a native OS file dialog through tkinter.
+
+    Args:
+        dialog_name: Name of the tkinter.filedialog function (e.g. 'askdirectory')
+        **options: Options passed to the dialog (title, initialdir, filetypes...)
+
+    Returns:
+        Selected path, "" if cancelled, or None if native dialogs are unavailable
+    """
+    if tkinter is None:
+        return None
+
+    try:
+        root = tkinter.Tk()
+    except tkinter.TclError:
+        return None
+
+    try:
+        # Hidden root window, kept on top so the dialog doesn't open behind the app
+        root.withdraw()
+        root.attributes("-topmost", True)
+        return getattr(filedialog, dialog_name)(parent=root, **options) or ""
+    finally:
+        root.destroy()
 
 
 class RimWorldModlistGUI:
@@ -187,7 +222,8 @@ class RimWorldModlistGUI:
                 )
                 dpg.add_button(
                     label="Browse",
-                    callback=lambda: dpg.show_item("mods_dir_dialog")
+                    callback=self._browse_mods_dir,
+                    user_data=("mods_dir_input", "mods_dir_dialog")
                 )
                 dpg.add_button(
                     label="Save as Default",
@@ -224,7 +260,7 @@ class RimWorldModlistGUI:
                 border=True
             )
 
-        # File dialog for mods directory
+        # Fallback file dialog for mods directory (when native dialogs are unavailable)
         with dpg.file_dialog(
             directory_selector=True,
             show=False,
@@ -254,7 +290,7 @@ class RimWorldModlistGUI:
                 )
                 dpg.add_button(
                     label="Browse",
-                    callback=lambda: dpg.show_item("reverse_xml_dialog")
+                    callback=self._browse_reverse_xml
                 )
 
             dpg.add_spacer(height=10)
@@ -267,7 +303,8 @@ class RimWorldModlistGUI:
                 )
                 dpg.add_button(
                     label="Browse",
-                    callback=lambda: dpg.show_item("reverse_mods_dir_dialog")
+                    callback=self._browse_mods_dir,
+                    user_data=("reverse_mods_dir_input", "reverse_mods_dir_dialog")
                 )
                 dpg.add_button(
                     label="Save as Default",
@@ -304,7 +341,7 @@ class RimWorldModlistGUI:
                 border=True
             )
 
-        # File dialog for the modlist XML
+        # Fallback file dialogs (when native dialogs are unavailable)
         with dpg.file_dialog(
             show=False,
             callback=self._on_reverse_xml_selected,
@@ -315,7 +352,6 @@ class RimWorldModlistGUI:
             dpg.add_file_extension(".xml")
             dpg.add_file_extension(".*")
 
-        # File dialog for mods directory
         with dpg.file_dialog(
             directory_selector=True,
             show=False,
@@ -626,6 +662,22 @@ class RimWorldModlistGUI:
             output_name = selected.replace('.rwpackageId', '.xml')
             dpg.set_value("convert_output_name", output_name)
 
+    def _browse_mods_dir(self, sender, app_data, user_data):
+        """Pick a mods directory (user_data is (input tag, fallback dialog tag))."""
+        input_tag, fallback_dialog_tag = user_data
+        current = dpg.get_value(input_tag)
+
+        path = native_dialog(
+            "askdirectory",
+            title="Select Mods Directory",
+            initialdir=current if os.path.isdir(current) else None,
+            mustexist=True
+        )
+        if path is None:
+            dpg.show_item(fallback_dialog_tag)
+        elif path:
+            dpg.set_value(input_tag, os.path.normpath(path))
+
     def _on_mods_dir_selected(self, sender, app_data, user_data):
         """Handle mods directory selection (user_data is the input to fill)."""
         selections = app_data.get('selections', {})
@@ -746,14 +798,32 @@ class RimWorldModlistGUI:
         except Exception as e:
             self._update_status(f"Error saving settings: {str(e)}", (255, 100, 100))
 
+    def _browse_reverse_xml(self):
+        """Pick a modlist XML in reverse tab."""
+        current_dir = os.path.dirname(dpg.get_value("reverse_xml_input").strip().strip('"'))
+
+        path = native_dialog(
+            "askopenfilename",
+            title="Select Modlist XML",
+            initialdir=current_dir if os.path.isdir(current_dir) else self.config.default_output_dir,
+            filetypes=[("Modlist XML", "*.xml"), ("All files", "*.*")]
+        )
+        if path is None:
+            dpg.show_item("reverse_xml_dialog")
+        elif path:
+            self._set_reverse_xml(os.path.normpath(path))
+
     def _on_reverse_xml_selected(self, sender, app_data):
-        """Handle modlist XML selection in reverse tab."""
+        """Handle modlist XML selection in reverse tab (fallback dialog)."""
         selections = app_data.get('selections', {})
         path = list(selections.values())[0] if selections else app_data.get('file_path_name')
         if path:
-            dpg.set_value("reverse_xml_input", path)
-            # Auto-fill output name
-            dpg.set_value("reverse_output_name", get_rwpackageid_output_name(path))
+            self._set_reverse_xml(path)
+
+    def _set_reverse_xml(self, path: str):
+        """Fill the reverse tab XML input and auto-fill the output name."""
+        dpg.set_value("reverse_xml_input", path)
+        dpg.set_value("reverse_output_name", get_rwpackageid_output_name(path))
 
     def _convert_from_xml(self):
         """Convert a modlist XML back to a .rwpackageId file."""

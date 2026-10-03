@@ -21,6 +21,8 @@ a = Analysis(
         'beautifulsoup4',
         'urllib3',
         'charset_normalizer',
+        'tkinter',
+        'tkinter.filedialog',
         'config',
         'main',
         'moulinette',
