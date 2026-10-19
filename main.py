@@ -7,55 +7,16 @@ Main entry point with interactive menu for managing RimWorld modlists.
 
 import argparse
 import os
-import re
 import sys
 import subprocess
 from steam_workshop import extract_collection_id, fetch_collection_details
 from config import get_config
-from utils import write_workshop_ids_file
+from utils import write_workshop_ids_file, sanitize_filename, get_rwpackageid_path
 
 
 def get_database_dir() -> str:
     """Get the database directory from config."""
     return get_config().database_dir
-
-
-def sanitize_filename(filename: str) -> str:
-    """
-    Remove invalid characters from filename.
-    
-    Args:
-        filename: Original filename
-        
-    Returns:
-        Sanitized filename
-    """
-    # Remove invalid filename characters
-    sanitized = re.sub(r'[<>:"/\\|?*]', '', filename)
-    return sanitized.strip()
-
-
-def get_rwpackageid_path(name: str) -> str:
-    """
-    Get the full path for a .rwpackageId file in the database directory.
-    Automatically adds .rwpackageId extension if not present.
-    
-    Args:
-        name: Base name for the file (without or with .rwpackageId extension)
-        
-    Returns:
-        Full path to the .rwpackageId file
-    """
-    database_dir = get_database_dir()
-    
-    # Ensure database directory exists
-    os.makedirs(database_dir, exist_ok=True)
-    
-    # Add extension if not present
-    if not name.endswith('.rwpackageId'):
-        name = f"{name}.rwpackageId"
-    
-    return os.path.join(database_dir, name)
 
 
 def read_workshop_ids_file(filepath: str) -> list:

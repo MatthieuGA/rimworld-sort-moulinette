@@ -4,6 +4,7 @@ Utility functions for RimWorld modlist generation.
 
 import xml.etree.ElementTree as ET
 import os
+import re
 from typing import List, Optional
 from config import get_config
 
@@ -19,6 +20,61 @@ DEFAULT_VERSION = None  # Will be dynamically retrieved
 DEFAULT_EXPANSIONS = None  # Will be dynamically retrieved
 
 BASE_GAME_PACKAGE_ID = "ludeon.rimworld"
+RWPACKAGEID_EXTENSION = ".rwpackageId"
+
+# Characters not allowed in file names on Windows (the strictest OS), plus control characters
+INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+# Device names Windows refuses as file names, with or without an extension
+WINDOWS_RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL"} | {f"{p}{i}" for p in ("COM", "LPT") for i in range(1, 10)}
+
+
+def sanitize_filename(filename: str) -> str:
+    """
+    Make a name safe to use as a single file name (no folders) on any OS.
+
+    Invalid characters such as / or \\ are replaced with underscores, so
+    "Progression (2/3)" becomes "Progression (2_3)".
+
+    Args:
+        filename: Original filename
+
+    Returns:
+        Sanitized filename
+
+    Raises:
+        ValueError: If nothing usable is left (e.g. "", "..", "///")
+    """
+    sanitized = INVALID_FILENAME_CHARS.sub('_', filename)
+    # Windows silently drops trailing dots and spaces
+    sanitized = sanitized.strip().rstrip('. ')
+
+    if not sanitized.strip('_'):
+        raise ValueError(f"Invalid file name: {filename!r}")
+
+    if sanitized.split('.')[0].upper() in WINDOWS_RESERVED_NAMES:
+        sanitized = f"_{sanitized}"
+
+    return sanitized
+
+
+def get_rwpackageid_path(name: str) -> str:
+    """
+    Get the full path for a .rwpackageId file in the database directory.
+    The name is sanitized, and the .rwpackageId extension is added if not present.
+
+    Args:
+        name: Base name for the file (without or with .rwpackageId extension)
+
+    Returns:
+        Full path to the .rwpackageId file
+
+    Raises:
+        ValueError: If the name cannot be turned into a valid file name
+    """
+    if name.endswith(RWPACKAGEID_EXTENSION):
+        name = name[:-len(RWPACKAGEID_EXTENSION)]
+
+    return os.path.join(get_config().database_dir, f"{sanitize_filename(name)}{RWPACKAGEID_EXTENSION}")
 
 
 def get_package_id_from_about_xml(about_xml_path: str) -> Optional[str]:

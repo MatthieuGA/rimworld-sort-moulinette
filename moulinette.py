@@ -9,7 +9,7 @@ by reading package IDs from local mod folders, and back (--reverse).
 import argparse
 import os
 import sys
-from utils import create_modlist_xml, read_modlist_xml, write_workshop_ids_file
+from utils import create_modlist_xml, read_modlist_xml, write_workshop_ids_file, get_rwpackageid_path
 from mod_utils import convert_workshop_ids_to_package_ids, convert_package_ids_to_workshop_ids
 from config import get_config
 
@@ -17,26 +17,6 @@ from config import get_config
 def get_database_dir() -> str:
     """Get the database directory from config."""
     return get_config().database_dir
-
-
-def get_rwpackageid_path(name: str) -> str:
-    """
-    Get the full path for a .rwpackageId file in the database directory.
-    Automatically adds .rwpackageId extension if not present.
-    
-    Args:
-        name: Base name for the file (without or with .rwpackageId extension)
-        
-    Returns:
-        Full path to the .rwpackageId file
-    """
-    database_dir = get_database_dir()
-    
-    # Add extension if not present
-    if not name.endswith('.rwpackageId'):
-        name = f"{name}.rwpackageId"
-    
-    return os.path.join(database_dir, name)
 
 
 def get_xml_output_path(rwpackageid_name: str, custom_name: str = None) -> str:
@@ -360,6 +340,9 @@ def reverse_interactive(args) -> int:
     except KeyboardInterrupt:
         print("\nCancelled.")
         return 1
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
 
     print("\n" + "=" * 60)
     print("Configuration:")
@@ -443,7 +426,11 @@ Examples:
             print("  Run with only --reverse for interactive mode")
             return 1
 
-        output_file = get_rwpackageid_path(args.output if args.output else get_rwpackageid_output_name(args.input))
+        try:
+            output_file = get_rwpackageid_path(args.output if args.output else get_rwpackageid_output_name(args.input))
+        except ValueError as e:
+            print(f"Error: {e}")
+            return 1
         return process_reverse(args.input, args.mods_dir, output_file)
 
     # Interactive mode if no input file specified
@@ -505,7 +492,11 @@ Examples:
             input_file = args.input
         else:
             # Try in database directory
-            input_file = get_rwpackageid_path(args.input)
+            try:
+                input_file = get_rwpackageid_path(args.input)
+            except ValueError as e:
+                print(f"Error: {e}")
+                return 1
             if not os.path.exists(input_file):
                 print(f"Error: Input file not found: {args.input}")
                 print(f"  Also checked: {input_file}")
