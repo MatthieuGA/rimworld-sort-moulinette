@@ -102,7 +102,7 @@ The GUI has 6 tabs:
 2. **🔄 Convert to XML**
    - Select a mod list
    - Generate RimWorld-compatible XML (base game and expansions are added to the active mods)
-   - Save to your mod manager
+   - Saved straight into RimSort's modlists folder by default, or anywhere with "Save As..."
 
 3. **↩️ XML to ID List**
    - Select an existing RimSort/RimWorld modlist XML
@@ -118,7 +118,7 @@ The GUI has 6 tabs:
    - Perfect for excluding incompatible mods
 
 6. **⚙️ Settings**
-   - Customize paths
+   - Customize paths (ID lists folder, mods folder, XML output folder)
    - Adjust RimWorld version
    - Configure expansions
 

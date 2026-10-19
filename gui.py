@@ -19,10 +19,11 @@ except ImportError:
     tkinter = None
 
 # Import our existing modules
-from config import get_config
+from config import get_config, get_rimsort_modlists_dir
 from steam_workshop import extract_collection_id, fetch_collection_details
 from mod_utils import convert_workshop_ids_to_package_ids, convert_package_ids_to_workshop_ids
-from utils import create_modlist_xml, read_modlist_xml, write_workshop_ids_file
+from utils import (create_modlist_xml, read_modlist_xml, write_workshop_ids_file,
+                   sanitize_filename, get_rwpackageid_path, RWPACKAGEID_EXTENSION)
 from moulinette import get_rwpackageid_output_name
 import main as main_module  # Renamed to avoid conflict with main() function
 
@@ -168,8 +169,11 @@ class RimWorldModlistGUI:
             dpg.add_input_text(
                 tag="collection_output_name",
                 hint="Leave empty to use collection title",
-                width=600
+                width=600,
+                callback=self._update_name_hint,
+                user_data="collection_output_name"
             )
+            self._add_name_hint("collection_output_name")
 
             dpg.add_spacer(height=10)
             dpg.add_button(
@@ -222,8 +226,8 @@ class RimWorldModlistGUI:
                 )
                 dpg.add_button(
                     label="Browse",
-                    callback=self._browse_mods_dir,
-                    user_data=("mods_dir_input", "mods_dir_dialog")
+                    callback=self._browse_directory,
+                    user_data=("mods_dir_input", "mods_dir_dialog", "Select Mods Directory")
                 )
                 dpg.add_button(
                     label="Save as Default",
@@ -232,12 +236,19 @@ class RimWorldModlistGUI:
                 )
 
             dpg.add_spacer(height=10)
-            dpg.add_text("Output XML Name:")
-            dpg.add_input_text(
-                tag="convert_output_name",
-                hint="Leave empty to use input name",
-                width=600
-            )
+            dpg.add_text("Output XML:")
+            with dpg.group(horizontal=True):
+                dpg.add_input_text(
+                    tag="convert_output_name",
+                    hint="Name, or full path (leave empty to use input name)",
+                    width=500,
+                    callback=self._update_convert_output_hint
+                )
+                dpg.add_button(
+                    label="Save As...",
+                    callback=self._save_xml_as
+                )
+            dpg.add_text("", tag="convert_output_hint", color=(150, 150, 150), wrap=0)
 
             dpg.add_spacer(height=10)
             dpg.add_button(
@@ -260,20 +271,21 @@ class RimWorldModlistGUI:
                 border=True
             )
 
-        # Fallback file dialog for mods directory (when native dialogs are unavailable)
+        # Fallback file dialogs (when native dialogs are unavailable)
+        self._add_directory_dialog("mods_dir_dialog", "mods_dir_input")
+
         with dpg.file_dialog(
-            directory_selector=True,
             show=False,
-            callback=self._on_mods_dir_selected,
-            user_data="mods_dir_input",
-            tag="mods_dir_dialog",
+            callback=self._on_save_xml_selected,
+            tag="convert_save_dialog",
             width=700,
             height=400
         ):
-            dpg.add_file_extension(".*")
+            dpg.add_file_extension(".xml")
 
         # Refresh the list initially
         self._refresh_convert_list()
+        self._update_convert_output_hint()
 
     def _create_reverse_tab(self):
         """Create the 'XML to ID List' tab."""
@@ -303,8 +315,8 @@ class RimWorldModlistGUI:
                 )
                 dpg.add_button(
                     label="Browse",
-                    callback=self._browse_mods_dir,
-                    user_data=("reverse_mods_dir_input", "reverse_mods_dir_dialog")
+                    callback=self._browse_directory,
+                    user_data=("reverse_mods_dir_input", "reverse_mods_dir_dialog", "Select Mods Directory")
                 )
                 dpg.add_button(
                     label="Save as Default",
@@ -317,8 +329,11 @@ class RimWorldModlistGUI:
             dpg.add_input_text(
                 tag="reverse_output_name",
                 hint="Leave empty to use XML name",
-                width=600
+                width=600,
+                callback=self._update_name_hint,
+                user_data="reverse_output_name"
             )
+            self._add_name_hint("reverse_output_name")
 
             dpg.add_spacer(height=10)
             dpg.add_button(
@@ -352,16 +367,7 @@ class RimWorldModlistGUI:
             dpg.add_file_extension(".xml")
             dpg.add_file_extension(".*")
 
-        with dpg.file_dialog(
-            directory_selector=True,
-            show=False,
-            callback=self._on_mods_dir_selected,
-            user_data="reverse_mods_dir_input",
-            tag="reverse_mods_dir_dialog",
-            width=700,
-            height=400
-        ):
-            dpg.add_file_extension(".*")
+        self._add_directory_dialog("reverse_mods_dir_dialog", "reverse_mods_dir_input")
 
     def _create_merge_tab(self):
         """Create the 'Merge Lists' tab."""
@@ -403,8 +409,11 @@ class RimWorldModlistGUI:
         dpg.add_input_text(
             tag="merge_output_name",
             default_value=self.config.default_merged_name,
-            width=600
+            width=600,
+            callback=self._update_name_hint,
+            user_data="merge_output_name"
         )
+        self._add_name_hint("merge_output_name")
 
         dpg.add_spacer(height=10)
         dpg.add_button(
@@ -460,8 +469,11 @@ class RimWorldModlistGUI:
         dpg.add_input_text(
             tag="remove_output_name",
             hint="Name for filtered list",
-            width=600
+            width=600,
+            callback=self._update_name_hint,
+            user_data="remove_output_name"
         )
+        self._add_name_hint("remove_output_name")
 
         dpg.add_spacer(height=10)
         dpg.add_button(
@@ -487,20 +499,57 @@ class RimWorldModlistGUI:
             dpg.add_separator()
             dpg.add_spacer(height=5)
 
-            dpg.add_text("Database Directory:")
-            dpg.add_input_text(
-                tag="setting_database_dir",
-                default_value=self.config.database_dir,
-                width=600
-            )
+            dpg.add_text("Database Directory (where ID lists are stored):")
+            with dpg.group(horizontal=True):
+                dpg.add_input_text(
+                    tag="setting_database_dir",
+                    default_value=self.config.database_dir,
+                    width=600
+                )
+                dpg.add_button(
+                    label="Browse",
+                    callback=self._browse_directory,
+                    user_data=("setting_database_dir", "setting_database_dir_dialog", "Select Database Directory")
+                )
 
             dpg.add_spacer(height=5)
             dpg.add_text("Default Mods Directory:")
-            dpg.add_input_text(
-                tag="setting_mods_dir",
-                default_value=self.config.default_mods_dir,
-                width=600
+            with dpg.group(horizontal=True):
+                dpg.add_input_text(
+                    tag="setting_mods_dir",
+                    default_value=self.config.default_mods_dir,
+                    width=600
+                )
+                dpg.add_button(
+                    label="Browse",
+                    callback=self._browse_directory,
+                    user_data=("setting_mods_dir", "setting_mods_dir_dialog", "Select Default Mods Directory")
+                )
+
+            dpg.add_spacer(height=5)
+            dpg.add_text("Default Output Directory (where modlist XMLs are saved):")
+            with dpg.group(horizontal=True):
+                dpg.add_input_text(
+                    tag="setting_output_dir",
+                    default_value=self.config.default_output_dir_setting,
+                    hint="Leave empty for automatic",
+                    width=600
+                )
+                dpg.add_button(
+                    label="Browse",
+                    callback=self._browse_directory,
+                    user_data=("setting_output_dir", "setting_output_dir_dialog", "Select Default Output Directory")
+                )
+            rimsort_dir = get_rimsort_modlists_dir()
+            dpg.add_text(
+                f"Empty = RimSort's modlists folder ({rimsort_dir})" if rimsort_dir
+                else "Empty = current folder (RimSort's modlists folder was not found)",
+                color=(150, 150, 150)
             )
+
+            self._add_directory_dialog("setting_database_dir_dialog", "setting_database_dir")
+            self._add_directory_dialog("setting_mods_dir_dialog", "setting_mods_dir")
+            self._add_directory_dialog("setting_output_dir_dialog", "setting_output_dir")
 
             dpg.add_spacer(height=15)
             dpg.add_text("Display", color=(100, 200, 255))
@@ -659,17 +708,131 @@ class RimWorldModlistGUI:
         selected = dpg.get_value("convert_file_list")
         if selected and selected != "No files found":
             # Auto-fill output name
-            output_name = selected.replace('.rwpackageId', '.xml')
+            output_name = selected.replace(RWPACKAGEID_EXTENSION, '.xml')
             dpg.set_value("convert_output_name", output_name)
+            self._update_convert_output_hint()
 
-    def _browse_mods_dir(self, sender, app_data, user_data):
-        """Pick a mods directory (user_data is (input tag, fallback dialog tag))."""
-        input_tag, fallback_dialog_tag = user_data
+    def _add_name_hint(self, input_tag: str):
+        """Add the hint shown under an ID list name input when the name gets sanitized."""
+        dpg.add_text("", tag=f"{input_tag}_hint", show=False)
+        self._update_name_hint(user_data=input_tag)
+
+    def _update_name_hint(self, sender=None, app_data=None, user_data=None):
+        """Show the actual file name when a typed ID list name (user_data is the input tag) is changed."""
+        input_tag = user_data
+        hint_tag = f"{input_tag}_hint"
+        name = dpg.get_value(input_tag).strip()
+
+        if not name:
+            dpg.hide_item(hint_tag)
+            return
+
+        try:
+            file_name = os.path.basename(get_rwpackageid_path(name))
+        except ValueError:
+            dpg.set_value(hint_tag, "Invalid name")
+            dpg.configure_item(hint_tag, color=(255, 100, 100), show=True)
+            return
+
+        typed_name = name if name.endswith(RWPACKAGEID_EXTENSION) else f"{name}{RWPACKAGEID_EXTENSION}"
+        if file_name == typed_name:
+            dpg.hide_item(hint_tag)
+        else:
+            dpg.set_value(hint_tag, f"Will be saved as: {file_name}")
+            dpg.configure_item(hint_tag, color=(255, 200, 100), show=True)
+
+    def _resolve_xml_output_path(self, output_name: str) -> str:
+        """
+        Get the XML output path from the convert tab's output field.
+
+        A full path is used as is; a name is sanitized and placed in the default output directory.
+        An empty field uses the selected .rwpackageId name.
+
+        Raises:
+            ValueError: If there is no usable name
+        """
+        output_name = output_name.strip().strip('"')
+
+        if not output_name:
+            selected_file = dpg.get_value("convert_file_list")
+            if not selected_file or selected_file == "No files found":
+                raise ValueError("No output name")
+            output_name = selected_file
+
+        if output_name.endswith(RWPACKAGEID_EXTENSION):
+            output_name = output_name[:-len(RWPACKAGEID_EXTENSION)]
+        if output_name.lower().endswith('.xml'):
+            output_name = output_name[:-len('.xml')]
+
+        if os.path.isabs(output_name):
+            return f"{output_name}.xml"
+
+        return os.path.join(self.config.default_output_dir, f"{sanitize_filename(output_name)}.xml")
+
+    def _update_convert_output_hint(self):
+        """Show where the convert tab's XML will be saved."""
+        output_name = dpg.get_value("convert_output_name")
+        try:
+            dpg.set_value("convert_output_hint", f"Will be saved to: {self._resolve_xml_output_path(output_name)}")
+            dpg.configure_item("convert_output_hint", color=(150, 150, 150))
+        except ValueError:
+            if output_name.strip():
+                dpg.set_value("convert_output_hint", "Invalid name")
+                dpg.configure_item("convert_output_hint", color=(255, 100, 100))
+            else:
+                dpg.set_value("convert_output_hint", f"Will be saved in: {self.config.default_output_dir}")
+                dpg.configure_item("convert_output_hint", color=(150, 150, 150))
+
+    def _save_xml_as(self):
+        """Pick the convert tab's XML output path with a Save As dialog."""
+        try:
+            current = self._resolve_xml_output_path(dpg.get_value("convert_output_name"))
+        except ValueError:
+            current = os.path.join(self.config.default_output_dir, "modlist.xml")
+        current_dir = os.path.dirname(current)
+
+        path = native_dialog(
+            "asksaveasfilename",
+            title="Save Modlist XML As",
+            initialdir=current_dir if os.path.isdir(current_dir) else None,
+            initialfile=os.path.basename(current),
+            defaultextension=".xml",
+            filetypes=[("Modlist XML", "*.xml"), ("All files", "*.*")]
+        )
+        if path is None:
+            dpg.show_item("convert_save_dialog")
+        elif path:
+            dpg.set_value("convert_output_name", os.path.normpath(path))
+            self._update_convert_output_hint()
+
+    def _on_save_xml_selected(self, sender, app_data):
+        """Handle XML output selection in convert tab (fallback dialog)."""
+        path = app_data.get('file_path_name')
+        if path:
+            dpg.set_value("convert_output_name", path)
+            self._update_convert_output_hint()
+
+    def _add_directory_dialog(self, tag: str, input_tag: str):
+        """Add a fallback directory dialog (used when native dialogs are unavailable) filling input_tag."""
+        with dpg.file_dialog(
+            directory_selector=True,
+            show=False,
+            callback=self._on_directory_selected,
+            user_data=input_tag,
+            tag=tag,
+            width=700,
+            height=400
+        ):
+            dpg.add_file_extension(".*")
+
+    def _browse_directory(self, sender, app_data, user_data):
+        """Pick a directory (user_data is (input tag, fallback dialog tag, dialog title))."""
+        input_tag, fallback_dialog_tag, title = user_data
         current = dpg.get_value(input_tag)
 
         path = native_dialog(
             "askdirectory",
-            title="Select Mods Directory",
+            title=title,
             initialdir=current if os.path.isdir(current) else None,
             mustexist=True
         )
@@ -678,8 +841,8 @@ class RimWorldModlistGUI:
         elif path:
             dpg.set_value(input_tag, os.path.normpath(path))
 
-    def _on_mods_dir_selected(self, sender, app_data, user_data):
-        """Handle mods directory selection (user_data is the input to fill)."""
+    def _on_directory_selected(self, sender, app_data, user_data):
+        """Handle directory selection in a fallback dialog (user_data is the input to fill)."""
         selections = app_data.get('selections', {})
         if selections:
             path = list(selections.values())[0]
@@ -689,7 +852,6 @@ class RimWorldModlistGUI:
         """Convert selected .rwpackageId to XML."""
         selected_file = dpg.get_value("convert_file_list")
         mods_dir = dpg.get_value("mods_dir_input")
-        output_name = dpg.get_value("convert_output_name")
 
         if not selected_file or selected_file == "No files found":
             self._update_status("Please select a file to convert", (255, 100, 100))
@@ -699,12 +861,17 @@ class RimWorldModlistGUI:
             self._update_status("Mods directory does not exist", (255, 100, 100))
             return
 
+        try:
+            output_path = self._resolve_xml_output_path(dpg.get_value("convert_output_name"))
+        except ValueError as e:
+            self._update_status(f"Error: {str(e)}", (255, 100, 100))
+            return
+
         # Clear previous progress
         self._clear_window("convert_progress")
         self._update_status("Converting to XML...", (255, 200, 100))
 
         def convert_thread():
-            nonlocal output_name
             try:
                 # Get full path
                 input_file = os.path.join(self.config.database_dir, selected_file)
@@ -738,12 +905,6 @@ class RimWorldModlistGUI:
                     (100, 255, 100)
                 )
 
-                # Determine output name
-                if not output_name:
-                    output_name = selected_file.replace('.rwpackageId', '.xml')
-                elif not output_name.endswith('.xml'):
-                    output_name = f"{output_name}.xml"
-
                 # Create XML
                 self._append_to_window(
                     "convert_progress",
@@ -751,16 +912,17 @@ class RimWorldModlistGUI:
                     (200, 200, 200)
                 )
 
+                os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
                 create_modlist_xml(
                     package_ids=package_ids,
-                    output_path=output_name,
+                    output_path=output_path,
                     version=None,  # Use config default
                     expansions=None  # Use config default
                 )
 
                 self._append_to_window(
                     "convert_progress",
-                    f"✓ Modlist XML saved to: {output_name}",
+                    f"✓ Modlist XML saved to: {output_path}",
                     (100, 255, 100)
                 )
 
@@ -824,6 +986,7 @@ class RimWorldModlistGUI:
         """Fill the reverse tab XML input and auto-fill the output name."""
         dpg.set_value("reverse_xml_input", path)
         dpg.set_value("reverse_output_name", get_rwpackageid_output_name(path))
+        self._update_name_hint(user_data="reverse_output_name")
 
     def _convert_from_xml(self):
         """Convert a modlist XML back to a .rwpackageId file."""
@@ -1080,6 +1243,7 @@ class RimWorldModlistGUI:
             # Update config values
             self.config.parser['Paths']['database_dir'] = dpg.get_value("setting_database_dir")
             self.config.parser['Paths']['default_mods_dir'] = dpg.get_value("setting_mods_dir")
+            self.config.parser['Paths']['default_output_dir'] = dpg.get_value("setting_output_dir").strip()
             self.config.parser['Display']['max_files_listed'] = str(dpg.get_value("setting_max_files"))
             self.config.parser['Display']['max_warning_lines'] = str(dpg.get_value("setting_max_warnings"))
             self.config.parser['RimWorld']['default_version'] = dpg.get_value("setting_version")
@@ -1087,6 +1251,7 @@ class RimWorldModlistGUI:
 
             # Save to file
             self.config.save()
+            self._refresh_after_settings_change()
 
             self._update_status("Settings saved successfully!", (100, 255, 100))
 
@@ -1101,15 +1266,24 @@ class RimWorldModlistGUI:
             # Update UI
             dpg.set_value("setting_database_dir", self.config.database_dir)
             dpg.set_value("setting_mods_dir", self.config.default_mods_dir)
+            dpg.set_value("setting_output_dir", self.config.default_output_dir_setting)
             dpg.set_value("setting_max_files", self.config.max_files_listed)
             dpg.set_value("setting_max_warnings", self.config.max_warning_lines)
             dpg.set_value("setting_version", self.config.default_version)
             dpg.set_value("setting_include_expansions", self.config.include_expansions)
+            self._refresh_after_settings_change()
 
             self._update_status("Settings reset to defaults!", (100, 255, 100))
 
         except Exception as e:
             self._update_status(f"Error resetting settings: {str(e)}", (255, 100, 100))
+
+    def _refresh_after_settings_change(self):
+        """Refresh what depends on the paths settings (database file lists, XML destination)."""
+        self._refresh_convert_list()
+        self._refresh_merge_lists()
+        self._refresh_remove_lists()
+        self._update_convert_output_hint()
 
     def run(self):
         """Run the application."""

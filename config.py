@@ -6,8 +6,27 @@ Reads settings from config.ini or uses defaults.
 """
 
 import os
+import sys
 import configparser
 from typing import Optional, List
+
+
+def get_rimsort_modlists_dir() -> Optional[str]:
+    """
+    Get RimSort's modlists folder for the current OS.
+
+    Returns:
+        Path to the folder, or None if RimSort's folder doesn't exist
+    """
+    if sys.platform == 'win32':
+        data_dir = os.environ.get('LOCALAPPDATA', '')
+    elif sys.platform == 'darwin':
+        data_dir = os.path.expanduser('~/Library/Application Support')
+    else:
+        data_dir = os.environ.get('XDG_DATA_HOME') or os.path.expanduser('~/.local/share')
+
+    modlists_dir = os.path.join(data_dir, 'RimSort', 'modlists')
+    return modlists_dir if data_dir and os.path.isdir(modlists_dir) else None
 
 
 class Config:
@@ -36,7 +55,7 @@ class Config:
         self.parser['Paths'] = {
             'database_dir': 'rwpackageId_database',
             'default_mods_dir': './mods',
-            'default_output_dir': '.'
+            'default_output_dir': ''
         }
 
         # RimWorld section
@@ -78,7 +97,8 @@ database_dir = rwpackageId_database
 default_mods_dir = ./mods
 
 # Default directory for output XML files
-default_output_dir = .
+# (empty = RimSort's modlists folder if found, otherwise the current folder)
+default_output_dir =
 
 [RimWorld]
 # Default RimWorld version string for XML files
@@ -120,9 +140,14 @@ default_merged_name = merged_list
         return self.parser.get('Paths', 'default_mods_dir', fallback='./mods')
 
     @property
+    def default_output_dir_setting(self) -> str:
+        """Get the default output directory as written in the config (may be empty)."""
+        return self.parser.get('Paths', 'default_output_dir', fallback='').strip()
+
+    @property
     def default_output_dir(self) -> str:
-        """Get the default output directory path."""
-        return self.parser.get('Paths', 'default_output_dir', fallback='.')
+        """Get the default output directory path (empty setting = RimSort's modlists folder, else '.')."""
+        return self.default_output_dir_setting or get_rimsort_modlists_dir() or '.'
 
     # RimWorld
     @property
