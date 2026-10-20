@@ -1,9 +1,8 @@
 # Makefile for RimWorld Modlist Manager
 # Run: make
 
-# Use system Python (not Linuxbrew) to ensure dependencies are found
-PYTHON = /usr/bin/python3
-PYINSTALLER = $(PYTHON) -m PyInstaller
+PYTHON = python
+HATCH = $(PYTHON) -m hatch
 
 .PHONY: all clean install build verify help
 
@@ -13,20 +12,21 @@ all: build
 # Install dependencies
 install:
 	@echo "📦 Installing dependencies..."
-	$(PYTHON) -m pip install --user requests beautifulsoup4 dearpygui PyInstaller
+	$(PYTHON) -m pip install --upgrade hatch
+	$(HATCH) env create
 	@echo "✅ Dependencies installed"
 
 # Build the executable
 build:
-	@echo "🔨 Building executable with system Python..."
-	@echo "Using: $(PYTHON)"
+	@echo "🔨 Building executable with Hatch..."
+	@echo "Using: $(HATCH)"
 	@$(PYTHON) --version
 	@echo ""
 	rm -rf build dist
-	$(PYINSTALLER) gui.spec
+	$(HATCH) run build-exe
 	@echo ""
-	@echo "✅ Build complete: dist/gui"
-	@ls -lh dist/gui
+	@echo "✅ Build complete: dist/gui.exe or dist/gui"
+	@ls -lh dist
 
 # Clean build artifacts
 clean:
@@ -59,7 +59,4 @@ help:
 	@echo "make clean    - Remove build artifacts"
 	@echo "make help     - Show this help"
 	@echo ""
-	@echo "Output: dist/gui (Linux executable)"
-	@echo ""
-	@echo "Note: Uses system Python (/usr/bin/python3) to ensure"
-	@echo "      dependencies are found correctly."
+	@echo "Output: dist/ (platform executable)"

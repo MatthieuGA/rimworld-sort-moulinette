@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rimworld-sort-moulinette"
+version = "1.0.0"
+description = "RimWorld modlist manager for Steam Workshop collections"
+readme = "README.md"
+requires-python = ">=3.13"
+license = { text = "MIT" }
+authors = [
+  { name = "MatthieuGA" }
+]
+dependencies = [
+  "requests>=2.32.0",
+  "beautifulsoup4>=4.12.0",
+  "dearpygui>=2.0.0"
+]
+
+[project.optional-dependencies]
+build = [
+  "pyinstaller>=6.0.0"
+]
+
+[project.scripts]
+rimworld-moulinette = "main:main"
+rimworld-moulinette-gui = "gui:main"
+
+[tool.hatch.build]
+include = [
+  "*.py",
+  "config.ini.example",
+  "README.md",
+  "README_RELEASE.txt",
+  "gui.spec",
+  "rwpackageId_database/.gitkeep"
+]
+
+[tool.hatch.envs.default]
+dependencies = [
+  ".[build]"
+]
+
+[tool.hatch.envs.default.scripts]
+gui = "rimworld-moulinette-gui"
+cli = "rimworld-moulinette"
+build-exe = "pyinstaller gui.spec"
